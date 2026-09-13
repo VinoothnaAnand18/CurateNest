@@ -5,9 +5,11 @@ const dotenv = require('dotenv');
 
 // Load environment variables from parent .env or current .env
 dotenv.config({ path: path.join(__dirname, '../.env') });
+dotenv.config({ path: path.join(__dirname, '.env') });
 dotenv.config();
 
 const { connectDB } = require('./config/db');
+const { getGeminiClient } = require('./services/geminiService');
 
 // Route imports
 const authRoutes = require('./routes/auth');
@@ -37,7 +39,7 @@ app.get('/api/health', (req, res) => {
     status: 'online',
     app: 'CurateNest API',
     timestamp: new Date().toISOString(),
-    geminiConfigured: !!(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY_HERE'),
+    geminiConfigured: !!getGeminiClient(),
     chromaConfigured: !!process.env.CHROMA_URL,
   });
 });
@@ -50,6 +52,20 @@ app.use('/api/goals', goalRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/rag', ragRoutes);
+
+// Return actionable upload errors to the RAG screen instead of a generic failure.
+app.use((err, req, res, next) => {
+  if (err && err.name === 'MulterError') {
+    const message = err.code === 'LIMIT_FILE_SIZE'
+      ? 'PDF is larger than the 50 MB upload limit.'
+      : `Upload failed: ${err.message}`;
+    return res.status(400).json({ message });
+  }
+  if (err && err.message === 'Only PDF files are supported for book ingestion') {
+    return res.status(400).json({ message: err.message });
+  }
+  return next(err);
+});
 
 // 404 Handler
 app.use((req, res, next) => {
@@ -75,6 +91,7 @@ connectDB().then(() => {
     console.log(`CurateNest API Server running on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`Health Check: http://localhost:${PORT}/api/health`);
+    console.log(`Gemini Status: ${getGeminiClient() ? 'LIVE (Connected)' : 'OFFLINE (Demo Mode)'}`);
     console.log(`=========================================`);
   });
 }).catch((err) => {

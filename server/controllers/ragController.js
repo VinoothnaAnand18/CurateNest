@@ -41,13 +41,18 @@ const uploadDocument = async (req, res) => {
         },
       });
     } catch (procErr) {
-      console.error('Error processing PDF chunks:', procErr);
+      console.error('Error processing PDF chunks:', procErr.message);
       doc.status = 'error';
       doc.errorMessage = procErr.message;
       await doc.save();
       return res.status(500).json({
-        message: `Failed to extract text from PDF: ${procErr.message}`,
-        document: doc,
+        message: `PDF could not be indexed: ${procErr.message}`,
+        document: {
+          _id: doc._id,
+          originalName: doc.originalName,
+          status: doc.status,
+          errorMessage: doc.errorMessage,
+        },
       });
     }
   } catch (error) {

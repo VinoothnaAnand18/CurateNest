@@ -101,7 +101,12 @@ const RagChat = () => {
         initializeWelcomeMessage(res.data.document.originalName);
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to upload and process PDF');
+      const message = err.response?.data?.message
+        || (err.request
+          ? 'Could not reach the CurateNest backend. Confirm the server is running and try again.'
+          : err.message)
+        || 'PDF upload could not be completed.';
+      toast.error(message);
     } finally {
       setUploading(false);
     }

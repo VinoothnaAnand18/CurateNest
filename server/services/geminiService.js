@@ -1,11 +1,49 @@
+const path = require('path');
+const dotenv = require('dotenv');
+
+// Load environment variables reliably across all directory execution paths
+dotenv.config({ path: path.join(__dirname, '../../.env') });
+dotenv.config({ path: path.join(__dirname, '../.env') });
+dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config();
+
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
+// Models verified to be active and supported in this environment
+const PRIMARY_MODELS = ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.5-flash'];
+
 const getGeminiClient = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
+  const rawKey = process.env.GEMINI_API_KEY;
+  if (!rawKey) return null;
+
+  // Clean quotes or whitespace if added in .env
+  const apiKey = rawKey.replace(/^["'\s]+|["'\s]+$/g, '').trim();
+  if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
     return null;
   }
+
   return new GoogleGenerativeAI(apiKey);
+};
+
+// Resilient generative caller with multi-model fallback
+const callGeminiGeneration = async (prompt) => {
+  const client = getGeminiClient();
+  if (!client) return null;
+
+  let lastError = null;
+  for (const modelName of PRIMARY_MODELS) {
+    try {
+      const model = client.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      return response.text();
+    } catch (err) {
+      lastError = err;
+      console.warn(`Model ${modelName} call notice: ${err.message}. Trying next supported model...`);
+    }
+  }
+
+  throw lastError || new Error('All Gemini model calls failed');
 };
 
 // Fallback intelligent responses when Gemini API Key is missing or rate limited
@@ -148,9 +186,7 @@ const generateSummary = async ({ title, author, genre, promptType = 'summary' })
   }
 
   try {
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
     let prompt = '';
-
     if (promptType === 'summary') {
       prompt = `Provide a comprehensive, high-quality summary and analysis for the book "${title}" by ${author} (Genre: ${genre || 'General'}).
 Format your response in beautiful GitHub Markdown with:
@@ -173,9 +209,7 @@ Highlight the core concept and takeaway of each major section. Use clean markdow
       prompt = `Provide actionable wisdom and deep insights from the book "${title}" by ${author}.`;
     }
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    return await callGeminiGeneration(prompt);
   } catch (error) {
     console.error('Gemini generateSummary Error:', error.message);
     if (promptType === 'chapters') return mockChapterBreakdownFallback(title, author);
@@ -190,12 +224,11 @@ const generateRecommendations = async ({ userInterests, favoriteGenres, recentBo
   }
 
   try {
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const prompt = `You are CurateNest's smart AI book curator.
 User Profile:
-- Interests: ${userInterests ? userInterests.join(', ') : 'Self-Improvement, Science, Fiction'}
-- Favorite Genres: ${favoriteGenres ? favoriteGenres.join(', ') : 'Non-Fiction, Tech'}
-- Recent Reads: ${recentBooks ? recentBooks.join(', ') : 'Atomic Habits, Deep Work'}
+- Interests: ${userInterests && userInterests.length > 0 ? userInterests.join(', ') : 'Personal Development, Technology, Psychology'}
+- Favorite Genres: ${favoriteGenres && favoriteGenres.length > 0 ? favoriteGenres.join(', ') : 'Non-Fiction, Productivity'}
+- Recent Reads: ${recentBooks && recentBooks.length > 0 ? recentBooks.join(', ') : 'Atomic Habits, Deep Work'}
 - Desired Reading Mood / Vibe: ${mood}
 
 Generate 4 highly tailored, diverse book recommendations for this user.
@@ -211,9 +244,8 @@ Respond ONLY with a valid JSON array of objects with the following schema:
 ]
 Do not wrap in backticks or markdown fences, just pure JSON.`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text().trim();
+    const rawText = await callGeminiGeneration(prompt);
+    let text = rawText.trim();
     if (text.startsWith('```json')) {
       text = text.replace(/^```json/, '').replace(/```$/, '').trim();
     } else if (text.startsWith('```')) {
@@ -221,7 +253,7 @@ Do not wrap in backticks or markdown fences, just pure JSON.`;
     }
 
     const parsed = JSON.parse(text);
-    return Array.isArray(parsed) ? parsed : mockRecommendationsFallback(mood);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : mockRecommendationsFallback(mood);
   } catch (error) {
     console.error('Gemini recommendations error:', error.message);
     return mockRecommendationsFallback(mood);
@@ -235,10 +267,11 @@ const chatWithAssistant = async ({ message, bookTitle, bookAuthor, chatHistory =
   }
 
   try {
-    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const formattedHistory = chatHistory.map((item) => `${item.role === 'user' ? 'User' : 'CurateNest'}: ${item.content}`).join('\n');
+    const formattedHistory = chatHistory
+      .map((item) => `${item.role === 'user' ? 'User' : 'CurateNest'}: ${item.content}`)
+      .join('\n');
 
-    const prompt = `You are CurateNest AI, an expert literary and non-fiction book assistant.
+    const prompt = `You are CurateNest AI, an expert literary and non-fiction book assistant powered by Google Gemini.
 Book Context: "${bookTitle || 'General Book'}" ${bookAuthor ? `by ${bookAuthor}` : ''}.
 
 Conversation History:
@@ -246,14 +279,12 @@ ${formattedHistory}
 
 Current User Query: "${message}"
 
-Answer accurately, thoughtfully, and concisely in markdown. Reference specific ideas or chapters if known for this book. If the question is outside the scope of the book, answer politely while connecting back to reading concepts.`;
+Answer accurately, thoughtfully, and concisely in clean Markdown. Reference specific ideas, chapters, or arguments from this book. If the question is outside the scope of the book, answer politely while connecting back to reading and learning principles.`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    return await callGeminiGeneration(prompt);
   } catch (error) {
     console.error('Gemini chat assistant error:', error.message);
-    return `I encountered a temporary connection error with Gemini API: ${error.message}. Please check your API key in Settings.`;
+    return `I encountered a temporary connection error with Gemini API: ${error.message}. Please check your API key in Settings or try again in a moment.`;
   }
 };
 

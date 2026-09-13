@@ -1,9 +1,27 @@
 const fs = require('fs');
+const path = require('path');
+const dotenv = require('dotenv');
+
+dotenv.config({ path: path.join(__dirname, '../../.env') });
+dotenv.config({ path: path.join(__dirname, '../.env') });
+dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config();
+
 const pdfParse = require('pdf-parse');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // In-memory document chunk store for instant vector retrieval fallback
 const localVectorStore = new Map();
+const EMBEDDING_MODEL = 'gemini-embedding-001';
+const EMBEDDING_BATCH_SIZE = 50;
+
+const getApiKey = () => {
+  const raw = process.env.GEMINI_API_KEY;
+  if (!raw) return null;
+  const cleaned = raw.replace(/^["'\s]+|["'\s]+$/g, '').trim();
+  if (!cleaned || cleaned === 'YOUR_GEMINI_API_KEY_HERE') return null;
+  return cleaned;
+};
 
 // Helper to compute cosine similarity between two numeric vectors
 const cosineSimilarity = (vecA, vecB) => {
@@ -41,21 +59,64 @@ const generateLocalEmbedding = (text) => {
   return embedding.map(val => val / mag);
 };
 
-// Compute embeddings using Gemini or local fallback
+// Compute one embedding using Gemini or the local cosine-similarity fallback.
+// Query embeddings use this helper; document ingestion uses the batch helper below.
 const getEmbedding = async (text) => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
+  const apiKey = getApiKey();
+  if (!apiKey) {
     return generateLocalEmbedding(text);
   }
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
-    const result = await model.embedContent(text);
+    const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({ model: EMBEDDING_MODEL });
+    const result = await model.embedContent({
+      content: { role: 'user', parts: [{ text }] },
+      taskType: 'RETRIEVAL_QUERY',
+    });
     return result.embedding.values;
   } catch (err) {
-    console.warn('Gemini embedding failed, using local vector fallback:', err.message);
+    console.warn(`Gemini query embedding unavailable; using local retrieval fallback: ${err.message}`);
     return generateLocalEmbedding(text);
+  }
+};
+
+// Batch document embeddings to avoid a network request (and retry) for every chunk.
+// If Gemini embeddings are temporarily unavailable, all chunks use the compatible
+// deterministic local vectors so upload and retrieval continue to work.
+const embedDocumentChunks = async (chunks) => {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    return chunks.map((chunk) => ({ ...chunk, embedding: generateLocalEmbedding(chunk.text) }));
+  }
+
+  try {
+    const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({ model: EMBEDDING_MODEL });
+    const embeddedChunks = [];
+
+    for (let start = 0; start < chunks.length; start += EMBEDDING_BATCH_SIZE) {
+      const batch = chunks.slice(start, start + EMBEDDING_BATCH_SIZE);
+      const result = await model.batchEmbedContents({
+        requests: batch.map((chunk) => ({
+          content: { role: 'user', parts: [{ text: chunk.text }] },
+          taskType: 'RETRIEVAL_DOCUMENT',
+          title: 'CurateNest uploaded document',
+        })),
+      });
+
+      if (!result.embeddings || result.embeddings.length !== batch.length) {
+        throw new Error('Gemini returned an incomplete embedding batch');
+      }
+
+      embeddedChunks.push(...batch.map((chunk, index) => ({
+        ...chunk,
+        embedding: result.embeddings[index].values,
+      })));
+    }
+
+    return embeddedChunks;
+  } catch (err) {
+    console.warn(`Gemini document embeddings unavailable; storing local vectors instead: ${err.message}`);
+    return chunks.map((chunk) => ({ ...chunk, embedding: generateLocalEmbedding(chunk.text) }));
   }
 };
 
@@ -93,7 +154,6 @@ const chunkDocument = (pagesData, chunkSize = 800, chunkOverlap = 150) => {
 const processPdfDocument = async (filePath, documentId) => {
   const dataBuffer = fs.readFileSync(filePath);
 
-  // Custom page render to capture page numbers
   const pages = [];
   let currentPage = 1;
 
@@ -119,16 +179,11 @@ const processPdfDocument = async (filePath, documentId) => {
   const totalPages = parsedData.numpages || pages.length || 1;
 
   const rawChunks = chunkDocument(pages.length > 0 ? pages : [{ pageNumber: 1, text: parsedData.text }]);
-
-  // Generate embeddings for each chunk
-  const chunksWithEmbeddings = [];
-  for (const chunk of rawChunks) {
-    const embedding = await getEmbedding(chunk.text);
-    chunksWithEmbeddings.push({
-      ...chunk,
-      embedding,
-    });
+  if (rawChunks.length === 0) {
+    throw new Error('No selectable text was found in this PDF. Upload a text-based PDF or run OCR on a scanned document first.');
   }
+
+  const chunksWithEmbeddings = await embedDocumentChunks(rawChunks);
 
   // Store in memory for instant retrieval
   localVectorStore.set(String(documentId), chunksWithEmbeddings);
@@ -156,13 +211,17 @@ const retrieveContext = async (documentId, query, topK = 4) => {
     return [];
   }
 
-  const queryEmbedding = await getEmbedding(query);
+  // Keep fallback documents and queries in the same vector space. Without this,
+  // a recovered local document would be compared to a live Gemini query vector.
+  const storedDimension = chunks[0]?.embedding?.length;
+  const queryEmbedding = storedDimension === 64
+    ? generateLocalEmbedding(query)
+    : await getEmbedding(query);
   const scoredChunks = chunks.map((chunk) => {
     let score = 0;
     if (chunk.embedding && chunk.embedding.length === queryEmbedding.length) {
       score = cosineSimilarity(queryEmbedding, chunk.embedding);
     } else {
-      // Simple term matching score
       const terms = query.toLowerCase().split(/\s+/).filter(t => t.length > 3);
       const textLower = chunk.text.toLowerCase();
       terms.forEach(term => {
@@ -197,8 +256,8 @@ const answerDocumentQuestion = async ({ documentId, documentTitle, question, cha
     .map((c, idx) => `[Source ${idx + 1} | Page ${c.pageNumber}]:\n${c.text}`)
     .join('\n\n');
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
+  const apiKey = getApiKey();
+  if (!apiKey) {
     // Offline / Demo mode RAG synthesis
     const topSource = relevantChunks[0];
     return {
@@ -207,11 +266,16 @@ const answerDocumentQuestion = async ({ documentId, documentTitle, question, cha
     };
   }
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const genModels = ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.5-flash'];
+  let answer = null;
+  let lastError = null;
 
-    const prompt = `You are CurateNest RAG Assistant, an accurate document question answering system.
+  for (const modelName of genModels) {
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: modelName });
+
+      const prompt = `You are CurateNest RAG Assistant, an accurate document question answering system.
 Book/Document Name: "${documentTitle}"
 
 Retrieved Document Context:
@@ -227,19 +291,25 @@ Instructions:
 3. If the answer cannot be found in the provided document context, explicitly state: "Based on the provided document sections, this information is not discussed." Do NOT invent or hallucinate information outside the document.
 4. Keep the tone professional, clear, and structured in Markdown.`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return {
-      answer: response.text(),
-      sources,
-    };
-  } catch (error) {
-    console.error('Gemini RAG chat error:', error.message);
-    return {
-      answer: `I encountered an issue processing the generative answer: ${error.message}. Here are the most relevant sections retrieved from your document:\n\n${relevantChunks.map(c => `> **Page ${c.pageNumber}**: ${c.text.slice(0, 200)}...`).join('\n\n')}`,
-      sources,
-    };
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      answer = response.text();
+      break;
+    } catch (error) {
+      lastError = error;
+      console.warn(`RAG model ${modelName} notice: ${error.message}`);
+    }
   }
+
+  if (answer) {
+    return { answer, sources };
+  }
+
+  console.error('Gemini RAG chat error:', lastError?.message);
+  return {
+    answer: `I encountered an issue processing the generative answer: ${lastError?.message}. Here are the most relevant sections retrieved from your document:\n\n${relevantChunks.map(c => `> **Page ${c.pageNumber}**: ${c.text.slice(0, 200)}...`).join('\n\n')}`,
+    sources,
+  };
 };
 
 module.exports = {
