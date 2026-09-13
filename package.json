@@ -1,0 +1,26 @@
+{
+  "name": "curatenest",
+  "version": "1.0.0",
+  "description": "CurateNest — AI-Powered Smart Reading & Book Management Platform",
+  "scripts": {
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "build:client": "cd client && npm run build",
+    "start:server": "cd server && npm start"
+  },
+  "keywords": [
+    "reading",
+    "books",
+    "ai",
+    "gemini",
+    "rag",
+    "vector-database",
+    "react",
+    "vite",
+    "express",
+    "mongodb"
+  ],
+  "author": "CurateNest Team",
+  "license": "MIT"
+}
