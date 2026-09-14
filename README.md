@@ -47,8 +47,8 @@ Library  ──►  Reading Progress  ──►  Insights  ──►  AI Assista
 
 ### 4. 📄 Chat With Your Books (RAG Pipeline)
 * **PDF Book Ingestion**: Upload study PDFs, book chapters, or papers up to 50MB.
-* **Document Chunking & Embeddings**: Automatically parses PDF text, breaks it into overlapping semantic chunks, and generates vector embeddings.
-* **Vector Store with Fallback**: Integrates with ChromaDB when available and includes an embedded cosine vector retrieval engine so it works immediately out of the box.
+* **Document Chunking & Embeddings**: Automatically parses PDF text, breaks it into fixed-size overlapping chunks, and generates vector embeddings.
+* **Custom Vector Retrieval**: Stores document chunks with their embeddings and uses an in-memory cache plus cosine-similarity retrieval.
 * **Cited Answers**: Answers user questions referencing exact document pages and contextual snippets.
 
 ### 5. 🎯 Smart AI Recommendations
@@ -94,9 +94,9 @@ flowchart TD
     subgraph RAG_Engine["RAG Pipeline"]
         PDF["Uploaded PDF Book"]
         Extract["pdf-parse (Page Extraction)"]
-        Chunk["Semantic Chunker (800 chars + 150 overlap)"]
+        Chunk["Fixed-size Chunker (800 chars + 150 overlap)"]
         Embed["Gemini / Vector Embeddings"]
-        VectorDB[("ChromaDB / Cosine Vector Index")]
+        VectorDB[("MongoDB Chunks / Cosine Vector Index")]
         Retriever["Vector Similarity Retriever (Top-K)"]
         GeminiSyn["Gemini 1.5 Flash (Cited Synthesis)"]
     end
@@ -126,7 +126,7 @@ flowchart TD
 | **Backend** | Node.js, Express.js, REST APIs |
 | **Database** | MongoDB, Mongoose *(with automatic in-memory fallback via mongodb-memory-server)* |
 | **Authentication** | JSON Web Tokens (JWT), bcryptjs password hashing |
-| **AI & RAG** | Google Gemini API (`@google/generative-ai`), Vector Embeddings, ChromaDB, pdf-parse |
+| **AI & RAG** | Google Gemini API (`@google/generative-ai`), Gemini Embeddings, custom cosine-similarity retrieval, pdf-parse |
 
 ---
 
@@ -251,7 +251,6 @@ PORT=5000
 MONGO_URI=
 JWT_SECRET=curatenest_super_secret_jwt_key_2026
 GEMINI_API_KEY=your_gemini_api_key_here
-CHROMA_URL=http://localhost:8000
 ```
 
 > **Note:**

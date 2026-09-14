@@ -8,23 +8,7 @@ const getGoals = async (req, res) => {
     const currentYear = new Date().getFullYear();
     let goals = await ReadingGoal.find({ user: req.user._id }).sort({ year: -1 });
 
-    // If no goal exists, automatically initialize current year reading goal
-    if (goals.length === 0) {
-      const completedCount = await Book.countDocuments({
-        user: req.user._id,
-        status: 'Completed',
-      });
-
-      const defaultGoal = await ReadingGoal.create({
-        user: req.user._id,
-        title: `${currentYear} Reading Challenge`,
-        target: 20,
-        year: currentYear,
-        progress: completedCount,
-      });
-
-      goals = [defaultGoal];
-    } else {
+    if (goals.length > 0) {
       // Sync progress with actual completed books for the year
       const completedCount = await Book.countDocuments({
         user: req.user._id,

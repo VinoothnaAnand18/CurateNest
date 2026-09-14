@@ -2,6 +2,37 @@ const Book = require('../models/Book');
 const ReadingHistory = require('../models/ReadingHistory');
 const ReadingGoal = require('../models/ReadingGoal');
 const Note = require('../models/Note');
+const User = require('../models/User');
+const bcrypt = require('bcryptjs');
+
+const DEMO_EMAIL = 'reader@curatenest.ai';
+const DEMO_PASSWORD = 'curate123';
+
+// Create the one account advertised by the login screen. This deliberately runs
+// independently of normal registration, so personal accounts are never seeded.
+const ensureDemoUser = async () => {
+  let demoUser = await User.findOne({ email: DEMO_EMAIL });
+
+  if (!demoUser) {
+    demoUser = await User.create({
+      name: 'CurateNest Reader',
+      email: DEMO_EMAIL,
+      password: await bcrypt.hash(DEMO_PASSWORD, 10),
+      interests: ['Personal Growth', 'Technology', 'Psychology'],
+      favoriteGenres: ['Non-Fiction', 'Productivity'],
+      isDemo: true,
+    });
+  } else if (demoUser.isDemo) {
+    // Keep the published demo credentials deterministic without weakening normal authentication.
+    demoUser.password = await bcrypt.hash(DEMO_PASSWORD, 10);
+    await demoUser.save();
+  } else {
+    throw new Error(`The reserved demo email ${DEMO_EMAIL} belongs to a non-demo account.`);
+  }
+
+  await seedUserData(demoUser._id);
+  return demoUser;
+};
 
 const seedUserData = async (userId) => {
   // Check if user already has books
@@ -178,4 +209,4 @@ const seedUserData = async (userId) => {
   return { message: 'Demo library successfully seeded!', booksCount: createdBooks.length };
 };
 
-module.exports = { seedUserData };
+module.exports = { seedUserData, ensureDemoUser, DEMO_EMAIL };

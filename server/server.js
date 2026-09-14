@@ -10,6 +10,7 @@ dotenv.config();
 
 const { connectDB } = require('./config/db');
 const { getGeminiClient } = require('./services/geminiService');
+const { ensureDemoUser } = require('./services/seedService');
 
 // Route imports
 const authRoutes = require('./routes/auth');
@@ -40,7 +41,6 @@ app.get('/api/health', (req, res) => {
     app: 'CurateNest API',
     timestamp: new Date().toISOString(),
     geminiConfigured: !!getGeminiClient(),
-    chromaConfigured: !!process.env.CHROMA_URL,
   });
 });
 
@@ -85,7 +85,13 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 // Initialize Database and Start Server
-connectDB().then(() => {
+connectDB().then(async () => {
+  try {
+    await ensureDemoUser();
+    console.log('Demo account is ready.');
+  } catch (error) {
+    console.error('Demo account initialization failed:', error.message);
+  }
   app.listen(PORT, () => {
     console.log(`=========================================`);
     console.log(`CurateNest API Server running on port ${PORT}`);

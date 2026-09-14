@@ -192,6 +192,9 @@ const deleteBook = async (req, res) => {
 // @route   POST /api/books/seed
 const seedBooks = async (req, res) => {
   try {
+    if (!req.user.isDemo) {
+      return res.status(403).json({ message: 'Sample data is only available in the demo account' });
+    }
     const result = await seedUserData(req.user._id);
     return res.json(result);
   } catch (error) {

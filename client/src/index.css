@@ -48,6 +48,26 @@ html.light [class*="text-slate-300"] { color: #334155 !important; }
 html.light [class*="text-slate-400"] { color: #64748b !important; }
 html.light [class*="text-slate-500"] { color: #64748b !important; }
 
+/* Accent shades designed for a dark surface need a darker counterpart on white. */
+html.light [class*="text-indigo-300"],
+html.light [class*="text-indigo-400"] { color: #4338ca !important; }
+html.light [class*="text-purple-300"],
+html.light [class*="text-purple-400"] { color: #7e22ce !important; }
+html.light [class*="text-amber-300"],
+html.light [class*="text-amber-400"] { color: #a16207 !important; }
+html.light [class*="text-emerald-300"],
+html.light [class*="text-emerald-400"] { color: #047857 !important; }
+html.light [class*="text-rose-300"],
+html.light [class*="text-rose-400"] { color: #be123c !important; }
+html.light [class*="text-blue-300"],
+html.light [class*="text-blue-400"] { color: #1d4ed8 !important; }
+
+/* Navigation needs a distinct surface from the application canvas in light mode. */
+html.light aside[class*="bg-slate-950"],
+html.light header[class*="bg-slate-950"] {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+}
+
 html.light input,
 html.light textarea,
 html.light select {

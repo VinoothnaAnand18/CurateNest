@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ragAPI } from '../services/api';
 import { useToast } from '../components/Toast';
+import MarkdownContent from '../components/MarkdownContent';
 
 const SUGGESTED_QUESTIONS = [
   'What are the core ideas discussed in this document?',
@@ -58,7 +59,7 @@ const RagChat = () => {
     setMessages([
       {
         role: 'assistant',
-        content: `I am ready to answer questions about **"${docName}"**. I will ground my answers strictly in your document text and provide citations with page references.`,
+      content: `Ask a question about “${docName}”. I’ll answer from the document and include page references.`,
         sources: [],
       },
     ]);
@@ -178,7 +179,7 @@ const RagChat = () => {
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold text-white">Chat With Your Book</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Upload any PDF book or study document, extract semantic chunks into the vector store, and ask contextual questions.
+          Upload a PDF, split it into overlapping text chunks, and ask questions grounded in its contents.
         </p>
       </div>
 
@@ -331,7 +332,7 @@ const RagChat = () => {
                       : 'bg-slate-800/90 text-slate-200 border border-slate-700/80'
                   }`}
                 >
-                  <p className="whitespace-pre-line">{m.content}</p>
+                  <MarkdownContent content={m.content} />
 
                   {/* Cited Sources & Page References */}
                   {m.sources && m.sources.length > 0 && (

@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const { seedUserData } = require('../services/seedService');
+const { DEMO_EMAIL } = require('../services/seedService');
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'curatenest_jwt_secret_dev_key_2026', {
@@ -17,6 +17,10 @@ const register = async (req, res) => {
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Please provide name, email, and password' });
+    }
+
+    if (email.trim().toLowerCase() === DEMO_EMAIL) {
+      return res.status(400).json({ message: 'This email is reserved for the CurateNest demo account' });
     }
 
     const existingUser = await User.findOne({ email: email.toLowerCase() });
@@ -35,13 +39,6 @@ const register = async (req, res) => {
       favoriteGenres: favoriteGenres || ['Non-Fiction', 'Productivity'],
     });
 
-    // Seed realistic demo library for immediate rich experience
-    try {
-      await seedUserData(user._id);
-    } catch (seedErr) {
-      console.warn('Auto-seeding library warning:', seedErr.message);
-    }
-
     const token = generateToken(user._id);
 
     return res.status(201).json({
@@ -53,6 +50,7 @@ const register = async (req, res) => {
         interests: user.interests,
         favoriteGenres: user.favoriteGenres,
         themePreference: user.themePreference,
+        isDemo: user.isDemo,
       },
     });
   } catch (error) {
@@ -92,6 +90,7 @@ const login = async (req, res) => {
         interests: user.interests,
         favoriteGenres: user.favoriteGenres,
         themePreference: user.themePreference,
+        isDemo: user.isDemo,
       },
     });
   } catch (error) {

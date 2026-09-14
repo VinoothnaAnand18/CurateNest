@@ -54,7 +54,7 @@ const Register = () => {
 
     try {
       await register(name, email, password, ['Personal Growth', 'Technology'], selectedGenres);
-      toast.success('Welcome to CurateNest! Your starter library has been seeded.');
+      toast.success('Welcome to CurateNest! Your library is ready for your first book.');
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');

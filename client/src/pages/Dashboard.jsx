@@ -107,19 +107,7 @@ const Dashboard = () => {
       pages: item.pagesRead,
     }));
 
-  // Fallback if no history yet
-  const displayChartData =
-    chartData.length > 0
-      ? chartData
-      : [
-          { date: 'Mon', pages: 15 },
-          { date: 'Tue', pages: 28 },
-          { date: 'Wed', pages: 20 },
-          { date: 'Thu', pages: 35 },
-          { date: 'Fri', pages: 22 },
-          { date: 'Sat', pages: 40 },
-          { date: 'Sun', pages: 30 },
-        ];
+  const displayChartData = chartData;
 
   // Genre distribution
   const genreCounts = {};
@@ -168,7 +156,7 @@ const Dashboard = () => {
           >
             <Sparkles className="w-4 h-4" /> Ask AI
           </Link>
-          {totalBooks === 0 && (
+          {user?.isDemo && totalBooks === 0 && (
             <button
               onClick={handleSeedDemo}
               disabled={seeding}

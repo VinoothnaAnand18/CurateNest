@@ -217,7 +217,7 @@ const Settings = () => {
         </div>
 
         {/* Demo Data Management */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm shadow-xl space-y-4 flex flex-col justify-between">
+        {user?.isDemo && <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm shadow-xl space-y-4 flex flex-col justify-between">
           <div>
             <h2 className="text-base font-bold text-white flex items-center gap-2 mb-1">
               <Database className="w-5 h-5 text-emerald-400" /> Sample Library Demo
@@ -235,7 +235,7 @@ const Settings = () => {
             <RefreshCw className={`w-4 h-4 ${seeding ? 'animate-spin' : ''}`} />
             {seeding ? 'Seeding Library...' : 'Populate Sample Books & Stats'}
           </button>
-        </div>
+        </div>}
       </div>
     </div>
   );

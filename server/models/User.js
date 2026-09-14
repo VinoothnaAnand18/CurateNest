@@ -36,6 +36,11 @@ const userSchema = new mongoose.Schema(
       enum: ['dark', 'light'],
       default: 'dark',
     },
+    // Reserved for the deterministic, non-personal account used by the demo login.
+    isDemo: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

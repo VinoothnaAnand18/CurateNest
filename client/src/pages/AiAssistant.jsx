@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { aiAPI, booksAPI } from '../services/api';
 import { useToast } from '../components/Toast';
+import MarkdownContent from '../components/MarkdownContent';
 
 const QUICK_PROMPTS = [
   { id: 'summary', label: 'Book Summary', icon: FileText },
@@ -31,13 +32,13 @@ const AiAssistant = () => {
 
   const [books, setBooks] = useState([]);
   const [selectedBook, setSelectedBook] = useState(initialTitle ? { title: initialTitle, author: initialAuthor } : null);
-  const [customTitle, setCustomTitle] = useState(initialTitle || 'Atomic Habits');
-  const [customAuthor, setCustomAuthor] = useState(initialAuthor || 'James Clear');
+  const [customTitle, setCustomTitle] = useState(initialTitle || '');
+  const [customAuthor, setCustomAuthor] = useState(initialAuthor || '');
 
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: `Hello! I am your **CurateNest AI Book Assistant**, powered by Gemini. Select a book from your library or enter any book above to generate deep chapter analyses, key takeaways, mental models, or ask any specific questions!`,
+      content: 'Ask me anything about a book in your library. I can summarize it, break down chapters, explain key ideas, or help you explore its concepts.',
     },
   ]);
   const [inputQuery, setInputQuery] = useState('');
@@ -268,9 +269,7 @@ const AiAssistant = () => {
                 </button>
               </div>
 
-              <div className="prose prose-invert max-w-none text-slate-200 text-sm leading-relaxed whitespace-pre-line">
-                {structuredOutput}
-              </div>
+              <MarkdownContent content={structuredOutput} className="text-slate-200 text-sm leading-relaxed" />
             </div>
           ) : (
             <div className="py-16 text-center text-slate-400">
@@ -307,7 +306,7 @@ const AiAssistant = () => {
                       : 'bg-slate-800/90 text-slate-200 border border-slate-700/80 shadow-inner'
                   }`}
                 >
-                  <p className="whitespace-pre-line">{m.content}</p>
+                  <MarkdownContent content={m.content} />
                 </div>
 
                 {m.role === 'user' && (
